@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.shard.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     # a failing prerelease must not turn the CI badge red
@@ -36,6 +36,13 @@ jobs:
           - 'pre'
         os:
           - ubuntu-latest
+        # Two shards of about equal test time (per-file times of a Julia 1 run). Shard `a` lists
+        # the heaviest files; shard `b` excludes them, so a new test file lands in `b`.
+        shard:
+          - name: a
+            args: 'models/inception models/sam3 models/vit models/densenet models/mobilenetv3 models/efficientnet models/z_image hub/initialization'
+          - name: b
+            args: '!models/inception !models/sam3 !models/vit !models/densenet !models/mobilenetv3 !models/efficientnet !models/z_image !hub/initialization'
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -44,8 +51,14 @@ jobs:
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
+        with:
+          # coverage from one version is enough; it slows the other legs down
+          coverage: ${{ matrix.version == '1' }}
+          test_args: ${{ matrix.shard.args }}
       - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.version == '1'
       - uses: codecov/codecov-action@v7
+        if: matrix.version == '1'
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
